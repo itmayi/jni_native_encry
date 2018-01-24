@@ -26,7 +26,7 @@ import java.util.zip.Adler32;
 public class Test {
 
     static {
-        System.load("/Users/yt/IdeaProjects/DexShellTool/lib/libencryptFile.so");
+        System.load("/Users/yt/IdeaProjects/DexShellTool/lib/libaes.so");
     }
 
     private static final int MODE = 1;//加密
@@ -38,20 +38,19 @@ public class Test {
         String dirPath = getProjectPath() + "/force/";
         File dir = new File(dirPath);
         //新建文件夹
-//        createDir(dir);
+        createDir(dir);
         //解压源apk和壳apk
         String srcApkPath = dirPath + "srcApk.apk";
-        String shellDexPath = dirPath + "unshell.apk";
-//        decodeApk(srcApkPath);
-//        decodeApk(shellDexPath);
+        String shellApkPath = dirPath + "unshell.apk";
+        decodeApk(shellApkPath);
         //修改AndroidManifest.xml文件
-//        modifyManifest(srcApkPath,shellDexPath);
+        modifyManifest(srcApkPath,shellApkPath);
         //加壳
-        reinForce(srcApkPath,shellDexPath);
+        reinForce(srcApkPath,shellApkPath);
         //重打包签名
-        rebuildAndSign(srcApkPath);
+        rebuildAndSign(shellApkPath);
         //清理文件夹
-        //        cleanDir(dir);
+//        cleanDir(dir);
 
 
     }
@@ -64,7 +63,7 @@ public class Test {
         String apkName= getApkName(srcApkPath);
         String forcePath = getProjectPath() + "/force/";
         String resultPath = getProjectPath() + "/result/";
-        String apkPath = forcePath + apkName;
+        String apkPath = forcePath + apkName; //  ../force/unshell/
         String rebuildPath = resultPath + apkName +"_rebuild.apk";
         String cmdRebuild = MessageFormat.format("/usr/local/bin/apktool b {0} -o {1}",apkPath,rebuildPath);
         callShell(cmdRebuild);
@@ -162,7 +161,7 @@ public class Test {
         return apkName;
     }
     /**
-     * 解压源apk 和 壳apk
+     * 解压apk
      */
     public static void decodeApk(String apkPath){
         String outPutDir = getProjectPath() + "/force/" + getApkName(apkPath);
@@ -226,44 +225,38 @@ public class Test {
      * 加壳
      */
     public static void reinForce(String srcApk,String shellApk){
-        String srcDex = getProjectPath() + "/force/" + getApkName(srcApk) + "/classes.dex";
-        String distDex = getProjectPath() + "/force/" + getApkName(srcApk) + "/classes2.dex";
+        String apkOut = getProjectPath() + "/lib/yu_rf.txt";
         String unshellDex = getProjectPath() + "/force/" + getApkName(shellApk) + "/classes.dex";
-
-        File srcDexFile = new File(srcDex);
 
         File unshellDexFile = new File(unshellDex);
 
-        File distDexFile = new File(distDex);
+        encrypt(srcApk,apkOut,MODE);
 
-        encrypt(srcDex,distDex,MODE);
+        File srcAes = new File(apkOut);//加密后file
 
-        byte[] distDexArray = readFileBytes(distDexFile);
+        byte[] srcDistArray = readFileBytes(srcAes);
         byte[] unshellDexArray = readFileBytes(unshellDexFile);
 
-        int srcDexLength = distDexArray.length;
+        int srcApkLength = srcDistArray.length;
         int unshellDexLength = unshellDexArray.length;
-        int totalLenfth = srcDexLength + unshellDexLength + 4;
+        int totalLenfth = srcApkLength + unshellDexLength + 4;
 
         byte[] newDexArray = new byte[totalLenfth];
 
         System.arraycopy(unshellDexArray,0,newDexArray,0,unshellDexLength); //先拷贝壳dex
-        System.arraycopy(distDexArray,0,newDexArray,unshellDexLength,srcDexLength);  //拷贝源apk
-        System.arraycopy(intToByte(srcDexLength),0,newDexArray,totalLenfth - 4,4);  //源apk大小
+        System.arraycopy(srcApkLength,0,newDexArray,unshellDexLength,srcApkLength);  //拷贝源apk
+        System.arraycopy(intToByte(srcApkLength),0,newDexArray,totalLenfth - 4,4);  //源apk大小
 
         fixFileSizeHeader(newDexArray);
         fixSHA1Header(newDexArray);
         fixCheckSumHeader(newDexArray);
 
-        //替换classes.dex,删除加密后的classes.dex
+        //替换壳classes.dex
         try {
-            if (srcDexFile.exists()){
-                srcDexFile.delete();
+            if(unshellDexFile.exists()){
+                unshellDexFile.delete();
             }
-            if (distDexFile.exists()){
-                distDexFile.delete();
-            }
-            FileOutputStream localFileOutputStream = new FileOutputStream(srcDex);
+            FileOutputStream localFileOutputStream = new FileOutputStream(unshellDex);  //将混合后的dex文件写回原壳位置
             localFileOutputStream.write(newDexArray);
             localFileOutputStream.flush();
             localFileOutputStream.close();
